@@ -20,33 +20,33 @@ jobs:
     # Get version info
     - name: Get version information
       id: version_info
-      shell: bash
+      shell: pwsh
       run: |
-        COMMIT_HASH=$(git rev-parse --short HEAD)
-        BUILD_ID=${GITHUB_RUN_NUMBER}
+        $COMMIT_HASH = (git rev-parse --short HEAD)
+        $BUILD_ID = $env:GITHUB_RUN_NUMBER
 
-        if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
-          YEAR=$(date +'%y')
-          WEEK=$(date +'%U')
-          VERSION="${YEAR}.${WEEK}.0-${BUILD_ID}"
-          echo "BUILD_TYPE=stable" >> $GITHUB_ENV
-        elif [[ "${GITHUB_REF_NAME}" == "develop" ]]; then
-          YEAR=$(date +'%y')
-          WEEK=$(date +'%U')
-          VERSION="${YEAR}.${WEEK}.0-${COMMIT_HASH}-rc.${BUILD_ID}"
-          echo "BUILD_TYPE=rc" >> $GITHUB_ENV
-        elif [[ "${GITHUB_REF_NAME}" == feature/* || "${GITHUB_REF_NAME}" == bugfix/* ]]; then
-          YEAR=$(date +'%y')
-          WEEK=$(date +'%U')
-          VERSION="${YEAR}.${WEEK}.0-${COMMIT_HASH}-dev.${BUILD_ID}"
-          echo "BUILD_TYPE=dev" >> $GITHUB_ENV
-        else
-          echo "Unsupported branch type: ${GITHUB_REF_NAME}"
+        if ($env:GITHUB_REF_NAME -eq "main") {
+          $YEAR = (Get-Date).ToString("yy")
+          $WEEK = [cultureinfo]::InvariantCulture.Calendar.GetWeekOfYear((Get-Date), [System.Globalization.CalendarWeekRule]::FirstDay, [DayOfWeek]::Sunday)
+          $VERSION = "$YEAR.$WEEK.0-$BUILD_ID"
+          echo "BUILD_TYPE=stable" | Out-File -Append -FilePath $env:GITHUB_ENV
+        } elseif ($env:GITHUB_REF_NAME -eq "develop") {
+          $YEAR = (Get-Date).ToString("yy")
+          $WEEK = [cultureinfo]::InvariantCulture.Calendar.GetWeekOfYear((Get-Date), [System.Globalization.CalendarWeekRule]::FirstDay, [DayOfWeek]::Sunday)
+          $VERSION = "$YEAR.$WEEK.0-$COMMIT_HASH-rc.$BUILD_ID"
+          echo "BUILD_TYPE=rc" | Out-File -Append -FilePath $env:GITHUB_ENV
+        } elseif ($env:GITHUB_REF_NAME -like "feature/*" -or $env:GITHUB_REF_NAME -like "bugfix/*") {
+          $YEAR = (Get-Date).ToString("yy")
+          $WEEK = [cultureinfo]::InvariantCulture.Calendar.GetWeekOfYear((Get-Date), [System.Globalization.CalendarWeekRule]::FirstDay, [DayOfWeek]::Sunday)
+          $VERSION = "$YEAR.$WEEK.0-$COMMIT_HASH-dev.$BUILD_ID"
+          echo "BUILD_TYPE=dev" | Out-File -Append -FilePath $env:GITHUB_ENV
+        } else {
+          Write-Error "Unsupported branch type: $env:GITHUB_REF_NAME"
           exit 1
-        fi
+        }
 
-        echo "VERSION=${VERSION}" >> $GITHUB_ENV
-        echo "Version: ${VERSION}"
+        echo "VERSION=$VERSION" | Out-File -Append -FilePath $env:GITHUB_ENV
+        Write-Output "Version: $VERSION"
 
     # Set up Python
     - name: Set up Python
@@ -56,6 +56,7 @@ jobs:
 
     # Install Nuitka
     - name: Install Nuitka
+      shell: pwsh
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
@@ -63,21 +64,22 @@ jobs:
 
     # Build the executable
     - name: Build executable
+      shell: pwsh
       run: |
-        mkdir -p build/linux
-        nuitka --standalone --onefile --output-dir=build/linux --output-filename=tasa src/gui.py \
-          --include-data-files=src/low.png=low.png
+        mkdir build\windows
+        nuitka --standalone --onefile --output-dir=build\windows --output-filename=tasa.exe src\gui.py `
+          --include-data-files=src\low.png=low.png
 
     # Upload artifact to release
     - name: Upload to GitHub Release
       uses: ncipollo/release-action@v1
       with:
-        artifacts: build/linux/tasa
+        artifacts: build/windows/tasa.exe
         token: ${{ secrets.GITHUB_TOKEN }}
         tag: ${{ env.VERSION }}
         name: Release ${{ env.VERSION }}
         body: |
           This release contains the following:
-          - Built file: `tasa`
+          - Built file: `tasa.exe`
           - Build Type: ${{ env.BUILD_TYPE }}
         draft: true  # Set to false if you want it published immediately
