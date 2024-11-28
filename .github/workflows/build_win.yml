@@ -80,6 +80,7 @@ jobs:
         name: Release ${{ env.VERSION }}
         body: |
           This release contains the following:
+          - Built OS: `Windows`
           - Built file: `tasa.exe`
           - Build Type: ${{ env.BUILD_TYPE }}
         draft: true  # Set to false if you want it published immediately
