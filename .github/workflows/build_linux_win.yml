@@ -1,0 +1,114 @@
+name: Build and Release for Multiple Platforms
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths-ignore:
+      - "**/README.md"
+
+jobs:
+  build-and-release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            artifact_name: tasa.exe
+            build_dir: build/windows
+            output_filename: tasa.exe
+            nuitka_options: "--standalone --onefile"
+            os_label: "Windows"
+          - os: ubuntu-latest
+            artifact_name: tasa
+            build_dir: build/linux
+            output_filename: tasa
+            nuitka_options: "--standalone --onefile"
+            os_label: "Linux"
+
+    steps:
+      # Checkout the repository
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Get version info
+      - name: Get version information
+        id: version_info
+        run: |
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          BUILD_ID=${GITHUB_RUN_NUMBER}
+          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            YEAR=$(date +'%y')
+            WEEK=$(date +'%U')
+            VERSION="${YEAR}.${WEEK}.0-${BUILD_ID}"
+            echo "BUILD_TYPE=stable" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF_NAME}" == "develop" ]]; then
+            YEAR=$(date +'%y')
+            WEEK=$(date +'%U')
+            VERSION="${YEAR}.${WEEK}.0-${COMMIT_HASH}-rc.${BUILD_ID}"
+            echo "BUILD_TYPE=rc" >> $GITHUB_ENV
+          elif [[ "${GITHUB_REF_NAME}" == feature/* || "${GITHUB_REF_NAME}" == bugfix/* ]]; then
+            YEAR=$(date +'%y')
+            WEEK=$(date +'%U')
+            VERSION="${YEAR}.${WEEK}.0-${COMMIT_HASH}-dev.${BUILD_ID}"
+            echo "BUILD_TYPE=dev" >> $GITHUB_ENV
+          else
+            echo "Unsupported branch type: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "Version: ${VERSION}"
+
+      # Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12.7
+
+      # Install Nuitka
+      - name: Install Nuitka
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nuitka
+
+      # Build the executable
+      - name: Build executable
+        run: |
+          mkdir -p ${{ matrix.build_dir }}
+          nuitka ${{ matrix.nuitka_options }} --output-dir=${{ matrix.build_dir }} --output-filename=${{ matrix.output_filename }} src/gui.py \
+            --include-data-files=src/low.png=low.png
+
+      # Upload artifact
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.build_dir }}/${{ matrix.output_filename }}
+
+  release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    steps:
+      # Download all artifacts
+      - name: Download artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      # Create a GitHub Release
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: |
+            artifacts/tasa.exe
+            artifacts/tasa
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ env.VERSION }}
+          name: Release ${{ env.VERSION }}
+          body: |
+            This release contains the following:
+              - Built files for Windows and Linux
+              - Build Type: ${{ env.BUILD_TYPE }}
