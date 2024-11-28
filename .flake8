@@ -1,0 +1,17 @@
+[flake8]
+# Max line length compatible with Black
+max-line-length = 100
+
+# Directories and files to exclude from linting
+exclude = 
+    venv,
+    .git,
+    __pycache__,
+    build,
+    dist,
+    tests/*
+
+# Ignore rules that conflict with Black formatting
+ignore = 
+    E203,
+    W503
