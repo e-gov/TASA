@@ -6,3 +6,4 @@
    ██║   ██║  ██║███████║██║  ██║
    ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
 ```
+# Teenusehaldurite Arva Sisestuse Automatiseerija
