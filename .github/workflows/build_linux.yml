@@ -78,7 +78,7 @@ jobs:
         name: Release ${{ env.VERSION }}
         body: |
           This release contains the following:
-          - Built OS: `Linux`
-          - Built file: `tasa`
-          - Build Type: ${{ env.BUILD_TYPE }}
+            - Built file: `tasa`
+            - Build Type: ${{ env.BUILD_TYPE }}
+            - Built OS: `Linux`
         draft: true  # Set to false if you want it published immediately

@@ -82,4 +82,5 @@ jobs:
           This release contains the following:
             - Built file: `tasa.exe`
             - Build Type: ${{ env.BUILD_TYPE }}
+            - Built OS: `Windows`
         draft: true  # Set to false if you want it published immediately
