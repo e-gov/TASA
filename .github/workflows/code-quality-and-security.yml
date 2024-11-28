@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
   quality_and_security_checks:
@@ -45,7 +46,7 @@ jobs:
 
       # Step 8: Static Analysis for Security Issues with Bandit
       - name: Run Bandit
-        run: bandit -r src --exclude ./venv
+        run: bandit -r src --exclude ./venv --ini .bandit
 
       # Step 9: Dependency Vulnerability Check with pip-audit
       - name: Run Pip-audit
