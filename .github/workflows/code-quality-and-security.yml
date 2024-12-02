@@ -1,0 +1,65 @@
+name: Code Quality and Security Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  quality_and_security_checks:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12.7
+
+      # Step 3: Install dependencies
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pylint flake8 black bandit mypy pip-audit radon xenon semgrep
+
+      # Step 4: Format code with Black (Check Only)
+      - name: Check code formatting with Black
+        run: black --check src
+
+      # Step 5: Lint with Pylint
+      - name: Run Pylint
+        run: pylint $(find src -name "*.py" -not -path "./venv/*")
+
+      # Step 6: Check code style with Flake8
+      - name: Run Flake8
+        run: flake8 src --exclude=venv
+
+      # Step 7: Type Checking with Mypy
+      - name: Run Mypy
+        run: mypy src
+
+      # Step 8: Static Analysis for Security Issues with Bandit
+      - name: Run Bandit
+        run: bandit -r src --exclude ./venv --ini .bandit
+
+      # Step 9: Dependency Vulnerability Check with pip-audit
+      - name: Run Pip-audit
+        run: pip-audit
+
+      # Step 10: Analyze Code Complexity with Radon
+      - name: Run Radon
+        run: radon cc src -s -a
+
+      # Step 11: Monitor Code Quality Metrics with Xenon
+      - name: Run Xenon
+        run: xenon src --max-absolute B --max-modules B --max-average A
+
+      # Step 12: Lightweight Static Analysis with Semgrep
+      - name: Run Semgrep
+        run: semgrep --config auto

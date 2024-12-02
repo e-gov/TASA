@@ -1,0 +1,169 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/**'
+      - 'bugfix/**'
+    paths-ignore:
+      - "**/README.md"
+
+permissions:
+  contents: write  # Necessary for pushing tags to the repository
+
+jobs:
+  versioning:
+    runs-on: ubuntu-latest
+    outputs:
+      VERSION: ${{ steps.get_version.outputs.VERSION }}
+      BUILD_TYPE: ${{ steps.get_version.outputs.BUILD_TYPE }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Get version information
+        id: get_version
+        run: |
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          BUILD_ID=${GITHUB_RUN_NUMBER}
+          YEAR=$(date +'%y')
+          WEEK=$(date +'%U')
+          Z=0
+
+          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+            VERSION="${YEAR}.${WEEK}.${Z}-${BUILD_ID}"
+            BUILD_TYPE="stable"
+          elif [[ "${GITHUB_REF_NAME}" == "develop" ]]; then
+            VERSION="${YEAR}.${WEEK}.${Z}-${COMMIT_HASH}-rc.${BUILD_ID}"
+            BUILD_TYPE="rc"
+          elif [[ "${GITHUB_REF_NAME}" == bugfix/* ]]; then
+            Z=1  # Increment z for bugfix branches
+            VERSION="${YEAR}.${WEEK}.${Z}-${COMMIT_HASH}-dev.${BUILD_ID}"
+            BUILD_TYPE="dev"
+          elif [[ "${GITHUB_REF_NAME}" == feature/* ]]; then
+            VERSION="${YEAR}.${WEEK}.${Z}-${COMMIT_HASH}-dev.${BUILD_ID}"
+            BUILD_TYPE="dev"
+          else
+            echo "Unsupported branch type: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "BUILD_TYPE=${BUILD_TYPE}" >> $GITHUB_OUTPUT
+
+  build-windows:
+    runs-on: windows-latest
+    needs: versioning
+    env:
+      VERSION: ${{ needs.versioning.outputs.VERSION }}
+      BUILD_TYPE: ${{ needs.versioning.outputs.BUILD_TYPE }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12.7
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nuitka
+
+      - name: Build executable
+        run: |
+          mkdir build
+          nuitka --standalone --onefile --output-dir=build/windows --output-filename=tasa.exe src/gui.py `
+            --include-data-files=src/low.png=low.png --assume-yes-for-downloads
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasa-windows
+          path: build/windows/tasa.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    needs: versioning
+    env:
+      VERSION: ${{ needs.versioning.outputs.VERSION }}
+      BUILD_TYPE: ${{ needs.versioning.outputs.BUILD_TYPE }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12.7
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nuitka
+
+      - name: Build executable
+        run: |
+          mkdir -p build/linux
+          nuitka --standalone --onefile --output-dir=build/linux --output-filename=tasa src/gui.py \
+            --include-data-files=src/low.png=low.png --assume-yes-for-downloads
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasa-linux
+          path: build/linux/tasa
+
+  tag_and_release:
+    runs-on: ubuntu-latest
+    needs:
+      - build-windows
+      - build-linux
+      - versioning
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Git user
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+
+      - name: Create Git Tag
+        run: |
+          git tag -a "v${{ needs.versioning.outputs.VERSION }}" -m "Release v${{ needs.versioning.outputs.VERSION }}"
+          git push origin "v${{ needs.versioning.outputs.VERSION }}"
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tasa-windows
+          path: artifacts/tasa-windows
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tasa-linux
+          path: artifacts/tasa-linux
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: |
+            artifacts/tasa-windows/tasa.exe
+            artifacts/tasa-linux/tasa
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: v${{ needs.versioning.outputs.VERSION }}
+          name: Release v${{ needs.versioning.outputs.VERSION }}
+          body: |
+            This release contains the following:
+              - Built files: tasa.exe (Windows), tasa (Linux)
+              - Build Type: ${{ needs.versioning.outputs.BUILD_TYPE }}
+          draft: true  # Set to false if you want it published immediately
