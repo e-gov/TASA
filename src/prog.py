@@ -199,9 +199,18 @@ def _insert_arva_page_contact(
         cursor.execute(
             f"""
             INSERT OR IGNORE INTO {env_table_name}_arva_page_contact (
-                id, contactId, pageId, role, firstName, lastName, company, email, phone
+                id,
+                contactId,
+                pageId,
+                role,
+                firstName,
+                lastName,
+                company,
+                email,
+                countryCode,
+                nationalNumber
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 contact["id"],
@@ -212,7 +221,8 @@ def _insert_arva_page_contact(
                 contact["lastName"],
                 contact["company"],
                 contact["email"],
-                contact["phone"],
+                contact["countryCode"],
+                contact["nationalNumber"]
             ),
         )
 
@@ -343,7 +353,8 @@ def get_arva_records(
             contactId
             company
             email
-            phone
+            countryCode
+            nationalNumber
             }
         }
         arvaRelatedPages {
@@ -544,7 +555,7 @@ def prepare_record_variables(row: Tuple) -> Dict:
             "description": "",
             "editor": "code",
             "isPrivate": False,
-            "isPublished": False,
+            "isPublished": True,
             "locale": locale,
             "path": path,
             "tags": tags.split(";"),
@@ -679,6 +690,7 @@ def execute_graphql_mutation(
             verify=False,  # nosec:
             timeout=10,
         )
+        print(f'RespoOOOO: {response.text}')
         response.raise_for_status()  # Raise an exception for non-2xx responses
         return response.json()
     except requests.exceptions.RequestException as request_error:
@@ -777,7 +789,7 @@ def fetch_related_data(
     # Fetch page contact data
     cursor.execute(
         f"""
-        SELECT contactId, role, firstName, lastName, company, email, phone
+        SELECT contactId, role, firstName, lastName, company, email, countryCode, nationalNumber
         FROM "{env_table_name}_arva_page_contact"
         WHERE pageId = ?
         """,
@@ -791,7 +803,8 @@ def fetch_related_data(
             "lastName": row[3],
             "company": row[4],
             "email": row[5],
-            "phone": row[6],
+            "countryCode": row[6],
+            "nationalNumber": row[7],
         }
         for row in cursor.fetchall()
     ]

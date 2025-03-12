@@ -209,7 +209,8 @@ def create_related_tables(cursor: sqlite3.Cursor, table_name: str) -> None:
             lastName TEXT,
             company TEXT,
             email TEXT,
-            phone TEXT,
+            countryCode TEXT,
+            nationalNumber TEXT,
             FOREIGN KEY(pageId) REFERENCES {table_name}(article_id) ON DELETE CASCADE
         """,
         "arva_related_pages": f"""
