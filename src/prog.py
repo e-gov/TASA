@@ -6,7 +6,7 @@ import sqlite3
 import requests
 import urllib3
 import db_act
-
+from graphql_helper import get_graphql_mutations, get_graphql_queries
 
 # Disable InsecureRequestWarning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -59,7 +59,7 @@ def fetch_all_records(cursor: sqlite3.Cursor, env_table_name: str) -> List[Tuple
 
         cursor.execute(
             f"""
-            SELECT article_id, locale, title, tags, path, content
+            SELECT article_id, exp_article_id, locale, title, tags, path, content
             FROM {env_table_name}
             WHERE modified_timestamp IS NULL OR modified_timestamp > ?
         """,
@@ -94,6 +94,7 @@ def insert_arva_records(
         page_id = _insert_page_data(cursor, env_table_name, response_data)
 
         # Insert related ARVA data
+        _delete_records(cursor, env_table_name, page_id)
         _insert_arva_institution(cursor, env_table_name, page_id, response_data)
         _insert_arva_legal_act(cursor, env_table_name, page_id, response_data)
         _insert_arva_page_contact(cursor, env_table_name, page_id, response_data)
@@ -114,10 +115,31 @@ def insert_arva_records(
         conn.close()
 
 
+def _delete_records(
+    cursor: sqlite3.Cursor, env_table_name: str, article_id: int
+) -> None:
+    """Deletes all records with the given article_id from related tables."""
+
+    tables = [
+        f"{env_table_name}_arva_institution",
+        f"{env_table_name}_arva_legal_act",
+        f"{env_table_name}_arva_page_contact",
+        f"{env_table_name}_arva_related_pages",
+        f"{env_table_name}_arva_service",
+    ]
+
+    print("Deleting records for article_id:", article_id)
+
+    for table in tables:
+        cursor.execute(f"DELETE FROM {table} WHERE pageId = ?", (article_id,))
+
+    print("Deletion completed.")
+
+
 def _insert_page_data(
     cursor: sqlite3.Cursor, env_table_name: str, response_data: Dict
 ) -> int:
-    """Inserts page data into the main table and returns the page_id."""
+    """Inserts or updates page data in the main table and returns the article_id."""
     page_data = response_data["data"]["pages"]["single"]
     tags = ";".join(
         tag["title"] for tag in page_data["tags"] if isinstance(tag["title"], str)
@@ -125,8 +147,14 @@ def _insert_page_data(
 
     cursor.execute(
         f"""
-        INSERT OR IGNORE INTO {env_table_name} (article_id, locale, title, tags, path, content)
+        INSERT INTO {env_table_name} (article_id, locale, title, tags, path, content)
         VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(article_id) DO UPDATE SET
+            locale = excluded.locale,
+            title = excluded.title,
+            tags = excluded.tags,
+            path = excluded.path,
+            content = excluded.content
         """,
         (
             page_data["id"],
@@ -137,6 +165,7 @@ def _insert_page_data(
             page_data["content"],
         ),
     )
+
     return page_data["id"]
 
 
@@ -149,7 +178,7 @@ def _insert_arva_institution(
     ]:
         cursor.execute(
             f"""
-            INSERT OR IGNORE INTO {env_table_name}_arva_institution (
+            INSERT INTO {env_table_name}_arva_institution (
                 id, pageId, name, url, isResponsible
             )
             VALUES (?, ?, ?, ?, ?)
@@ -171,7 +200,7 @@ def _insert_arva_legal_act(
     for legal_act in response_data["data"]["arvaLegalAct"]["getLegalActsForPage"]:
         cursor.execute(
             f"""
-            INSERT OR IGNORE INTO {env_table_name}_arva_legal_act (
+            INSERT INTO {env_table_name}_arva_legal_act (
                 id, pageId, title, url, legalActType, globalId, groupId, versionStartDate
             )
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -198,10 +227,19 @@ def _insert_arva_page_contact(
     ]:
         cursor.execute(
             f"""
-            INSERT OR IGNORE INTO {env_table_name}_arva_page_contact (
-                id, contactId, pageId, role, firstName, lastName, company, email, phone
+            INSERT INTO {env_table_name}_arva_page_contact (
+                id,
+                contactId,
+                pageId,
+                role,
+                firstName,
+                lastName,
+                company,
+                email,
+                countryCode,
+                nationalNumber
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 contact["id"],
@@ -212,7 +250,8 @@ def _insert_arva_page_contact(
                 contact["lastName"],
                 contact["company"],
                 contact["email"],
-                contact["phone"],
+                contact["countryCode"],
+                contact["nationalNumber"],
             ),
         )
 
@@ -226,7 +265,7 @@ def _insert_arva_related_pages(
     ]:
         cursor.execute(
             f"""
-            INSERT OR IGNORE INTO {env_table_name}_arva_related_pages (id, pageId, title, locale)
+            INSERT INTO {env_table_name}_arva_related_pages (id, pageId, title, locale)
             VALUES (?, ?, ?, ?)
             """,
             (
@@ -245,7 +284,7 @@ def _insert_arva_service(
     for service in response_data["data"]["arvaService"]["getArvaServicesForPage"]:
         cursor.execute(
             f"""
-            INSERT OR IGNORE INTO {env_table_name}_arva_service (id, pageId, name, url)
+            INSERT INTO {env_table_name}_arva_service (id, pageId, name, url)
             VALUES (?, ?, ?, ?)
             """,
             (
@@ -276,105 +315,7 @@ def get_arva_records(
         "Content-Type": "application/json",
     }
 
-    arva_records_query = """
-        query($id: Int!) {
-        pages {
-            single(id: $id) {
-            id
-            title
-            tags {
-                id
-                title
-            }
-            path
-            content
-            locale
-            editor
-            isPublished
-            authorId
-            authorName
-            authorEmail
-            creatorId
-            creatorName
-            creatorEmail
-            createdAt
-            updatedAt
-            }
-            history(id: $id) {
-            trail {
-                versionId
-                versionDate
-                authorId
-                authorName
-                actionType
-                valueBefore
-                valueAfter
-            }
-            total
-            }
-        }
-        arvaInstitution {
-            getArvaInstitutionsForPage(pageId: $id) {
-            id
-            name
-            url
-            isResponsible
-            }
-        }
-        arvaLegalAct {
-            getLegalActsForPage(pageId: $id) {
-            id
-            globalId
-            groupId
-            title
-            url
-            versionStartDate
-            createdAt
-            updatedAt
-            legalActType
-            }
-        }
-        arvaPageContact {
-            getArvaPageContactForPage(pageId: $id) {
-            id
-            role
-            firstName
-            lastName
-            contactId
-            company
-            email
-            phone
-            }
-        }
-        arvaRelatedPages {
-            getRelatedPagesForPage(pageId: $id) {
-            id
-            title
-            locale
-            }
-        }
-        arvaService {
-            getArvaServicesForPage(pageId: $id) {
-            id
-            name
-            url
-            }
-        }
-        arvaSdgMeta {
-            getArvaSdgMetaForPage(pageId: $id) {
-            id
-            isSdg
-            country
-            serviceTypeCode
-            nuts3Code
-            lauCode
-            annexiTopicsCode
-            annexiiTopicsCode
-            annexiiiServiceCode
-            }
-        }
-        }
-    """
+    arva_records_query = get_graphql_queries()
 
     for article_id in [int(id.strip()) for id in article_ids.split(",")]:
         variables = {"id": article_id}
@@ -418,112 +359,6 @@ def get_arva_records(
             callback(f"Error fetching data for article ID {article_id}: {str(error)}")
 
 
-def get_graphql_mutations() -> Tuple[str, str]:
-    """
-    Retrieves the GraphQL mutations for creating a page and handling follow-ups.
-
-    Returns:
-        Tuple[str, str]: The create mutation and follow-up mutation strings.
-    """
-    create_mutation = """
-        mutation (
-            $content: String!,
-            $description: String!,
-            $editor: String!,
-            $isPrivate: Boolean!,
-            $isPublished: Boolean!,
-            $locale: String!,
-            $path: String!,
-            $publishEndDate: Date,
-            $publishStartDate: Date,
-            $scriptCss: String,
-            $scriptJs: String,
-            $tags: [String]!,
-            $title: String!
-        ) {
-        pages {
-            create(
-                content: $content,
-                description: $description,
-                editor: $editor,
-                isPrivate: $isPrivate,
-                isPublished: $isPublished,
-                locale: $locale,
-                path: $path,
-                publishEndDate: $publishEndDate,
-                publishStartDate: $publishStartDate,
-                scriptCss: $scriptCss,
-                scriptJs: $scriptJs,
-                tags: $tags,
-                title: $title
-            ) {
-            responseResult {
-                succeeded
-                errorCode
-                slug
-                message
-                __typename
-            }
-            page {
-                id
-                updatedAt
-                __typename
-            }
-            __typename
-            }
-            __typename
-        }
-        }
-    """
-    follow_up_mutation = """
-        mutation (
-            $pageId: Int!
-            $institutionInput: [ArvaInstitutionInput]
-            $legalActInput: [ArvaLegalActInput!]!
-            $pageContactInput: [ArvaPageContactInput!]
-            $relatedPagesInput: [ArvaRelatedPagesInput!]
-            $serviceInput: [ArvaServiceInput!]
-        ) {
-            arvaInstitution {
-                saveArvaInstitutionsForPage(pageId: $pageId, input: $institutionInput) {
-                    succeeded
-                    message
-                    __typename
-                }
-            }
-            arvaLegalAct {
-                createArvaLegalAct(pageId: $pageId, input: $legalActInput) {
-                    succeeded
-                    message
-                    __typename
-                }
-            }
-            arvaPageContact {
-                saveArvaPageContacts(pageId: $pageId, input: $pageContactInput) {
-                    succeeded
-                    message
-                    __typename
-                }
-            }
-            arvaRelatedPages {
-                saveRelatedPages(pageId: $pageId, input: $relatedPagesInput) {
-                    succeeded
-                    message
-                    __typename
-                }
-            }
-            arvaService {
-                saveArvaServicesForPage(pageId: $pageId, input: $serviceInput) {
-                    succeeded
-                    message
-                    __typename
-                }
-            }
-        }
-    """
-    return create_mutation, follow_up_mutation
-
-
 def prepare_record_variables(row: Tuple) -> Dict:
     """
     Prepares variables for the initial GraphQL mutation for a single record.
@@ -536,15 +371,16 @@ def prepare_record_variables(row: Tuple) -> Dict:
         Dict: A dictionary containing the `article_id` and `variables`
         for the GraphQL mutation.
     """
-    article_id, locale, title, tags, path, content = row
+    article_id, exp_article_id, locale, title, tags, path, content = row
     return {
         "article_id": article_id,
+        "exp_article_id": exp_article_id,
         "variables": {
             "content": content,
             "description": "",
             "editor": "code",
             "isPrivate": False,
-            "isPublished": False,
+            "isPublished": True,
             "locale": locale,
             "path": path,
             "tags": tags.split(";"),
@@ -577,25 +413,40 @@ def process_record(
     try:
         record_data = prepare_record_variables(row)
         article_id = record_data["article_id"]
+        exp_article_id = record_data.get("exp_article_id")
         variables = record_data["variables"]
 
-        # Execute the initial GraphQL mutation
-        response_data = execute_graphql_mutation(api_config, variables, "create")
-        if not response_data or not response_data.get("data"):
+        if not exp_article_id:
+            # Execute the initial GraphQL mutation
+            response_data = execute_graphql_mutation(api_config, variables, "create")
+        else:
+            variables["id"] = exp_article_id
+            response_data = execute_graphql_mutation(api_config, variables, "update")
+
+        if "errors" in response_data:
+            record_id = (
+                f"article id: {article_id}"
+                if not exp_article_id
+                else f"exp_article_id id: {exp_article_id}"
+            )
             callback(
-                f"Failed to process record for path: {variables.get('path', 'unknown')}"
+                f'Failed to process record {record_id}: {response_data["errors"][0].get("message")}'
             )
             return
 
-        create_result = response_data["data"]["pages"]["create"]
-        if not create_result or not create_result["responseResult"]["succeeded"]:
-            error_message = create_result.get("responseResult", {}).get(
-                "message", "Unknown error"
-            )
-            callback(f"Failed to create page: {error_message}")
-            return
+        result = response_data["data"]["pages"]
 
-        page_id = create_result["page"]["id"]
+        if "create" in result:
+            page_id = result["create"]["page"]["id"]
+            callback(
+                f'Record {page_id}: {result["create"]["responseResult"]["message"]}'
+            )
+
+        if "update" in result:
+            page_id = result["update"]["page"]["id"]
+            callback(
+                f'Record {page_id}: {result["update"]["responseResult"]["message"]}'
+            )
 
         # Update the database with success
         update_record_status(cursor, env_table_name, page_id, variables)
@@ -777,7 +628,7 @@ def fetch_related_data(
     # Fetch page contact data
     cursor.execute(
         f"""
-        SELECT contactId, role, firstName, lastName, company, email, phone
+        SELECT contactId, role, firstName, lastName, company, email, countryCode, nationalNumber
         FROM "{env_table_name}_arva_page_contact"
         WHERE pageId = ?
         """,
@@ -791,7 +642,8 @@ def fetch_related_data(
             "lastName": row[3],
             "company": row[4],
             "email": row[5],
-            "phone": row[6],
+            "countryCode": row[6],
+            "nationalNumber": row[7],
         }
         for row in cursor.fetchall()
     ]
@@ -887,12 +739,13 @@ def get_api_config(bearer_token: str, graphql_url: str) -> Dict[str, Any]:
         "Authorization": f"Bearer {bearer_token}",
         "Content-Type": "application/json",
     }
-    create_mutation, follow_up_mutation = get_graphql_mutations()
+    create_mutation, follow_up_mutation, update_mutation = get_graphql_mutations()
 
     return {
         "graphql_url": graphql_url,
         "headers": headers,
         "create": create_mutation,
+        "update": update_mutation,
         "follow_up": follow_up_mutation,
     }
 
@@ -934,7 +787,7 @@ def process_records(
                 callback(f"Error processing record: {record_error}")
 
         conn.commit()
-        callback("All records processed successfully.")
+        callback("All records processed.")
     except Exception as general_error:  # pylint: disable=broad-except
         callback(f"Error processing records: {general_error}")
     finally:

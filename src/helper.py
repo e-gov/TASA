@@ -52,7 +52,7 @@ def get_env_url(env: str) -> Optional[str]:
     envs = {
         "dev": "https://arva-main.dev.riaint.ee/graphql",
         "test": "https://arva-main.test.riaint.ee/graphql",
-        "prod": "",
+        "prod": "https://arva-main.prod.riaint.ee/graphql",
     }
     return envs.get(env)
 
