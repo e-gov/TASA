@@ -95,7 +95,8 @@ jobs:
             src/gui.py ^
             --include-data-files=src/low.png=low.png ^
             --windows-icon-from-ico=src/low.ico ^
-            --assume-yes-for-downloads
+            --assume-yes-for-downloads ^
+            --windows-console-mode=disable
         shell: cmd
       
       - name: Upload artifact
@@ -106,30 +107,30 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
+    container:
+      image: quay.io/pypa/manylinux_2_34_x86_64:latest
+
     needs: versioning
     env:
       VERSION: ${{ needs.versioning.outputs.VERSION }}
       BUILD_TYPE: ${{ needs.versioning.outputs.BUILD_TYPE }}
       SAFE_VERSION: ${{ needs.versioning.outputs.SAFE_VERSION }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.12.7
-
-      - name: Install Dependencies
+      - name: Install system dependencies
         run: |
-          sudo apt-get update
-          # For building .deb with fpm
-          sudo apt-get install -y ruby-full
-          sudo gem install --no-document fpm
+          yum install -y \
+            python3 python3-devel python3-pip \
+            ruby ruby-devel make gcc gcc-c++ \
 
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install nuitka
+          gem install --no-document fpm
+
+          pip3 install --upgrade pip
+          pip3 install -r requirements.txt
+          pip3 install nuitka
 
       - name: Build executable
         run: |
@@ -143,12 +144,10 @@ jobs:
 
       - name: Prepare package root
         run: |
-          # 1) Copy the binary into /usr/local/bin
           mkdir -p pkgroot/usr/local/bin
           cp build/linux/tasa-${{ env.SAFE_VERSION }} pkgroot/usr/local/bin/tasa
           chmod +x pkgroot/usr/local/bin/tasa
 
-          # 2) Place the .desktop file in /usr/share/applications
           mkdir -p pkgroot/usr/share/applications
           cat > pkgroot/usr/share/applications/tasa.desktop <<EOF
           [Desktop Entry]
@@ -159,13 +158,11 @@ jobs:
           Categories=Utility;
           EOF
 
-          # 3) Place the icon in /usr/share/pixmaps
           mkdir -p pkgroot/usr/share/pixmaps
           cp src/low.png pkgroot/usr/share/pixmaps/tasa.png
 
       - name: Build .deb
         run: |
-          # Build a deb package with fpm
           fpm \
             -s dir \
             -t deb \
@@ -174,7 +171,6 @@ jobs:
             --iteration 1 \
             --architecture amd64 \
             -C pkgroot .
-          # Rename for consistency using the SAFE_VERSION
           mv tasa_${{ env.VERSION }}-1_amd64.deb build/linux/tasa-${{ env.SAFE_VERSION }}.deb
 
       - name: Upload artifact
