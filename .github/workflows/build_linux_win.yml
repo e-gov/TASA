@@ -78,12 +78,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nuitka pillow
-        shell: cmd
-
-      - name: Convert PNG to ICO
-        run: |
-          python -c "from PIL import Image; Image.open('src/low.png').save('src/low.ico')"
+          pip install nuitka
         shell: cmd
 
       - name: Build executable
@@ -94,11 +89,11 @@ jobs:
             --output-filename=tasa-${{ env.SAFE_VERSION }}.exe ^
             src/gui.py ^
             --include-data-files=src/low.png=low.png ^
+            --include-data-files=src/low.ico=low.ico ^
             --windows-icon-from-ico=src/low.ico ^
             --assume-yes-for-downloads ^
             --windows-console-mode=disable
         shell: cmd
-      
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

@@ -2,6 +2,7 @@
 
 import os
 import sys
+import platform
 import threading
 
 # pylint: disable=no-member
@@ -68,7 +69,12 @@ def resource_path(relative_path: str) -> str:
     return absolute_path
 
 
-Window.icon = resource_path("low.png")
+if platform.system() == "Windows":
+    Window.icon = ""
+    Window.icon = resource_path("low.ico")
+else:
+    Window.icon = ""
+    Window.icon = resource_path("low.png")
 
 
 class LoadingPopup(Popup):
