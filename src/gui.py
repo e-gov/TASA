@@ -68,6 +68,9 @@ def resource_path(relative_path: str) -> str:
     return absolute_path
 
 
+Window.icon = resource_path("low.png")
+
+
 class LoadingPopup(Popup):
     """Popup for displaying a loading indicator."""
 
@@ -552,7 +555,6 @@ class MainScreen(BoxLayout):
                 "graphql_url": helper.get_env_url(source_env),
             }
             prog.get_arva_records(config, article_ids, callback=self.log_message)
-            # self.log_message("Data pulled from ARVA successfully!")
         except Exception as e:  # pylint: disable=broad-except
             self.log_message(f"Error: {e}")
         finally:
