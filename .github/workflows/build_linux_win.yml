@@ -81,6 +81,22 @@ jobs:
           pip install nuitka
         shell: cmd
 
+      - name: Create Windows version info
+        shell: pwsh
+        run: |
+          $json = @{
+            "CompanyName" = "RIA"
+            "FileDescription" = "Tasa"
+            "FileVersion" = "${{ env.VERSION }}"
+            "InternalName" = "Tasa"
+            "LegalCopyright" = "RIA 2025"
+            "OriginalFilename" = "tasa-${{ env.SAFE_VERSION }}.exe"
+            "ProductName" = "Tasa"
+            "ProductVersion" = "${{ env.VERSION }}"
+          } | ConvertTo-Json
+
+          Set-Content -Path version.json -Value $json
+
       - name: Build executable
         run: |
           mkdir build
@@ -92,8 +108,10 @@ jobs:
             --include-data-files=src/low.ico=low.ico ^
             --windows-icon-from-ico=src/low.ico ^
             --assume-yes-for-downloads ^
-            --windows-console-mode=disable
+            --windows-console-mode=disable ^
+            --windows-version-info=version.json
         shell: cmd
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -104,7 +122,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: quay.io/pypa/manylinux_2_34_x86_64:latest
-
     needs: versioning
     env:
       VERSION: ${{ needs.versioning.outputs.VERSION }}
@@ -119,7 +136,7 @@ jobs:
         run: |
           yum install -y \
             python3 python3-devel python3-pip \
-            ruby ruby-devel make gcc gcc-c++ \
+            ruby ruby-devel make gcc gcc-c++
 
           gem install --no-document fpm
 
