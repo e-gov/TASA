@@ -78,23 +78,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nuitka
+          pip install --upgrade --pre nuitka
         shell: cmd
 
       - name: Create Windows version info
         shell: pwsh
         run: |
           $json = @{
-            "CompanyName" = "RIA"
+            "CompanyName" = "Tasa"
             "FileDescription" = "Tasa"
             "FileVersion" = "${{ env.VERSION }}"
             "InternalName" = "Tasa"
-            "LegalCopyright" = "RIA 2025"
+            "LegalCopyright" = "RIA (C) 2025"
             "OriginalFilename" = "tasa-${{ env.SAFE_VERSION }}.exe"
             "ProductName" = "Tasa"
             "ProductVersion" = "${{ env.VERSION }}"
           } | ConvertTo-Json
-
           Set-Content -Path version.json -Value $json
 
       - name: Build executable
@@ -127,7 +126,6 @@ jobs:
       VERSION: ${{ needs.versioning.outputs.VERSION }}
       BUILD_TYPE: ${{ needs.versioning.outputs.BUILD_TYPE }}
       SAFE_VERSION: ${{ needs.versioning.outputs.SAFE_VERSION }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -137,9 +135,7 @@ jobs:
           yum install -y \
             python3 python3-devel python3-pip \
             ruby ruby-devel make gcc gcc-c++
-
           gem install --no-document fpm
-
           pip3 install --upgrade pip
           pip3 install -r requirements.txt
           pip3 install nuitka
@@ -159,7 +155,6 @@ jobs:
           mkdir -p pkgroot/usr/local/bin
           cp build/linux/tasa-${{ env.SAFE_VERSION }} pkgroot/usr/local/bin/tasa
           chmod +x pkgroot/usr/local/bin/tasa
-
           mkdir -p pkgroot/usr/share/applications
           cat > pkgroot/usr/share/applications/tasa.desktop <<EOF
           [Desktop Entry]
@@ -169,7 +164,6 @@ jobs:
           Type=Application
           Categories=Utility;
           EOF
-
           mkdir -p pkgroot/usr/share/pixmaps
           cp src/low.png pkgroot/usr/share/pixmaps/tasa.png
 
