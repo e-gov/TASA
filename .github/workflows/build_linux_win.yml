@@ -102,7 +102,7 @@ jobs:
             --company-name="RIA" ^
             --product-name="TASA" ^
             --file-version="${{ env.FILE_VERSION }}" ^
-            --product-version="${{ env.VERSION }}" ^
+            --product-version="${{ env.FILE_VERSION }}" ^
             --file-description="TASA rakendus" ^
             --copyright="RIA" ^
             --trademarks="RIA"
