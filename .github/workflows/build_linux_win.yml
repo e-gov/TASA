@@ -19,6 +19,8 @@ jobs:
     outputs:
       VERSION: ${{ steps.get_version.outputs.VERSION }}
       BUILD_TYPE: ${{ steps.get_version.outputs.BUILD_TYPE }}
+      SAFE_VERSION: ${{ steps.get_version.outputs.SAFE_VERSION }}
+      FILE_VERSION: ${{ steps.get_version.outputs.FILE_VERSION }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -50,8 +52,16 @@ jobs:
             exit 1
           fi
 
+          # Create a sanitized version for filenames, replacing '.' with '_'
+          SAFE_VERSION=$(echo "${VERSION}" | tr '.' '_')
+
+          # Create a numeric file version (tuple of 4 integers)
+          FILE_VERSION="${YEAR}.${WEEK}.${Z}.0"
+
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "BUILD_TYPE=${BUILD_TYPE}" >> $GITHUB_OUTPUT
+          echo "SAFE_VERSION=${SAFE_VERSION}" >> $GITHUB_OUTPUT
+          echo "FILE_VERSION=${FILE_VERSION}" >> $GITHUB_OUTPUT
 
   build-windows:
     runs-on: windows-latest
@@ -59,43 +69,8 @@ jobs:
     env:
       VERSION: ${{ needs.versioning.outputs.VERSION }}
       BUILD_TYPE: ${{ needs.versioning.outputs.BUILD_TYPE }}
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.12.7
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install nuitka pillow
-
-      - name: Convert PNG to ICO
-        run: |
-          python -c "from PIL import Image; Image.open('src/low.png').save('src/low.ico')"
-
-      - name: Build executable
-        run: |
-          mkdir build
-          nuitka --standalone --onefile --output-dir=build/windows --output-filename=tasa.exe src/gui.py `
-            --include-data-files=src/low.png=low.png --windows-icon-from-ico=src/low.ico --assume-yes-for-downloads
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: tasa-windows
-          path: build/windows/tasa.exe
-
-  build-linux:
-    runs-on: ubuntu-latest
-    needs: versioning
-    env:
-      VERSION: ${{ needs.versioning.outputs.VERSION }}
-      BUILD_TYPE: ${{ needs.versioning.outputs.BUILD_TYPE }}
+      SAFE_VERSION: ${{ needs.versioning.outputs.SAFE_VERSION }}
+      FILE_VERSION: ${{ needs.versioning.outputs.FILE_VERSION }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -110,29 +85,109 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nuitka
+        shell: cmd
+
+      - name: Build executable
+        run: |
+          mkdir build
+          nuitka --standalone --onefile ^
+            --output-dir=build/windows ^
+            --output-filename=tasa-${{ env.SAFE_VERSION }}.exe ^
+            src/gui.py ^
+            --include-data-files=src/low.png=low.png ^
+            --include-data-files=src/low.ico=low.ico ^
+            --windows-icon-from-ico=src/low.ico ^
+            --assume-yes-for-downloads ^
+            --windows-console-mode=disable ^
+            --company-name="RIA" ^
+            --product-name="TASA" ^
+            --file-version="${{ env.FILE_VERSION }}" ^
+            --product-version="${{ env.FILE_VERSION }}" ^
+            --file-description="TASA rakendus" ^
+            --copyright="RIA" ^
+            --trademarks="RIA"
+        shell: cmd
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasa-windows
+          path: build/windows/tasa-${{ env.SAFE_VERSION }}.exe
+
+  build-linux:
+    runs-on: ubuntu-latest
+    container:
+      image: quay.io/pypa/manylinux_2_34_x86_64:latest
+
+    needs: versioning
+    env:
+      VERSION: ${{ needs.versioning.outputs.VERSION }}
+      BUILD_TYPE: ${{ needs.versioning.outputs.BUILD_TYPE }}
+      SAFE_VERSION: ${{ needs.versioning.outputs.SAFE_VERSION }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install system dependencies
+        run: |
+          yum install -y \
+            python3 python3-devel python3-pip \
+            ruby ruby-devel make gcc gcc-c++ \
+
+          gem install --no-document fpm
+
+          pip3 install --upgrade pip
+          pip3 install -r requirements.txt
+          pip3 install nuitka
 
       - name: Build executable
         run: |
           mkdir -p build/linux
-          nuitka --standalone --onefile --output-dir=build/linux --output-filename=tasa src/gui.py \
-            --include-data-files=src/low.png=low.png --assume-yes-for-downloads
+          nuitka --standalone --onefile \
+            --output-dir=build/linux \
+            --output-filename=tasa-${{ env.SAFE_VERSION }} \
+            src/gui.py \
+            --include-data-files=src/low.png=low.png \
+            --assume-yes-for-downloads
 
-      - name: Create Linux Desktop Entry
+      - name: Prepare package root
         run: |
-          mkdir -p ~/.local/share/applications
-          echo "[Desktop Entry]
+          mkdir -p pkgroot/usr/local/bin
+          cp build/linux/tasa-${{ env.SAFE_VERSION }} pkgroot/usr/local/bin/tasa
+          chmod +x pkgroot/usr/local/bin/tasa
+
+          mkdir -p pkgroot/usr/share/applications
+          cat > pkgroot/usr/share/applications/tasa.desktop <<EOF
+          [Desktop Entry]
           Name=Tasa
-          Exec=$PWD/build/linux/tasa
-          Icon=$PWD/src/low.png
+          Exec=tasa
+          Icon=tasa
           Type=Application
-          Categories=Utility;" > ~/.local/share/applications/tasa.desktop
-          chmod +x ~/.local/share/applications/tasa.desktop
+          Categories=Utility;
+          EOF
+
+          mkdir -p pkgroot/usr/share/pixmaps
+          cp src/low.png pkgroot/usr/share/pixmaps/tasa.png
+
+      - name: Build .deb
+        run: |
+          fpm \
+            -s dir \
+            -t deb \
+            -n tasa \
+            -v "${{ env.VERSION }}" \
+            --iteration 1 \
+            --architecture amd64 \
+            -C pkgroot .
+          mv tasa_${{ env.VERSION }}-1_amd64.deb build/linux/tasa-${{ env.SAFE_VERSION }}.deb
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: tasa-linux
-          path: build/linux/tasa
+          path: |
+            build/linux/tasa-${{ env.SAFE_VERSION }}
+            build/linux/tasa-${{ env.SAFE_VERSION }}.deb
 
   tag_and_release:
     runs-on: ubuntu-latest
@@ -171,14 +226,18 @@ jobs:
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
-          artifacts: |
-            artifacts/tasa-windows/tasa.exe
-            artifacts/tasa-linux/tasa
           token: ${{ secrets.GITHUB_TOKEN }}
           tag: v${{ needs.versioning.outputs.VERSION }}
           name: Release v${{ needs.versioning.outputs.VERSION }}
           body: |
             This release contains the following:
-              - Built files: tasa.exe (Windows), tasa (Linux)
-              - Build Type: ${{ needs.versioning.outputs.BUILD_TYPE }}
-          draft: true  # Set to false if you want it published immediately
+            - Built files for Windows (tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.exe)
+            - Built files for Linux:
+              - Standalone binary (tasa-${{ needs.versioning.outputs.SAFE_VERSION }})
+              - Debian package (tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.deb)
+            - Build Type: ${{ needs.versioning.outputs.BUILD_TYPE }}
+          draft: true
+          artifacts: |
+            artifacts/tasa-windows/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.exe
+            artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}
+            artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.deb

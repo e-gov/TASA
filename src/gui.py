@@ -2,6 +2,7 @@
 
 import os
 import sys
+import platform
 import threading
 
 # pylint: disable=no-member
@@ -66,6 +67,14 @@ def resource_path(relative_path: str) -> str:
         print(f"[ERROR] Resource not found at path: {absolute_path}")
 
     return absolute_path
+
+
+if platform.system() == "Windows":
+    Window.icon = ""
+    Window.icon = resource_path("low.ico")
+else:
+    Window.icon = ""
+    Window.icon = resource_path("low.png")
 
 
 class LoadingPopup(Popup):
@@ -552,7 +561,6 @@ class MainScreen(BoxLayout):
                 "graphql_url": helper.get_env_url(source_env),
             }
             prog.get_arva_records(config, article_ids, callback=self.log_message)
-            # self.log_message("Data pulled from ARVA successfully!")
         except Exception as e:  # pylint: disable=broad-except
             self.log_message(f"Error: {e}")
         finally:
