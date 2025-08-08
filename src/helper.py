@@ -50,9 +50,9 @@ def get_env_url(env: str) -> Optional[str]:
         Optional[str]: The corresponding GraphQL URL or None if the environment is invalid.
     """
     envs = {
-        "dev": "https://arva-main.dev.riaint.ee/graphql",
-        "test": "https://arva-main.test.riaint.ee/graphql",
-        "prod": "https://arva-main.prod.riaint.ee/graphql",
+        "dev": "https://arva.dev.eesti.ee/graphql",
+        "test": "https://arva.test.eesti.ee/graphql",
+        "prod": "https://arva.eesti.ee/graphql",
     }
     return envs.get(env)
 
