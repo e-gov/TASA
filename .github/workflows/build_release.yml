@@ -1,29 +1,32 @@
 name: Build and Release
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Code Quality and Security Checks"]
+    types:
+      - completed
     branches:
       - main
       - develop
-      - 'feature/**'
-      - 'bugfix/**'
-    paths-ignore:
-      - "**/README.md"
 
 permissions:
-  contents: write  # Necessary for pushing tags to the repository
+  contents: write
 
 jobs:
   versioning:
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     outputs:
       VERSION: ${{ steps.get_version.outputs.VERSION }}
       BUILD_TYPE: ${{ steps.get_version.outputs.BUILD_TYPE }}
       SAFE_VERSION: ${{ steps.get_version.outputs.SAFE_VERSION }}
       FILE_VERSION: ${{ steps.get_version.outputs.FILE_VERSION }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
-      - name: Checkout code
+      - name: Checkout specific commit
         uses: actions/checkout@v3
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Get version information
         id: get_version
@@ -33,29 +36,29 @@ jobs:
           YEAR=$(date +'%y')
           WEEK=$(date +'%U')
           Z=0
+          BRANCH_NAME="${{ github.event.workflow_run.head_branch }}"
 
-          if [[ "${GITHUB_REF_NAME}" == "main" ]]; then
+          if [[ "${BRANCH_NAME}" == "main" ]]; then
             VERSION="${YEAR}.${WEEK}.${Z}-${BUILD_ID}"
             BUILD_TYPE="stable"
-          elif [[ "${GITHUB_REF_NAME}" == "develop" ]]; then
+          elif [[ "${BRANCH_NAME}" == "develop" ]]; then
             VERSION="${YEAR}.${WEEK}.${Z}-${COMMIT_HASH}-rc.${BUILD_ID}"
             BUILD_TYPE="rc"
-          elif [[ "${GITHUB_REF_NAME}" == bugfix/* ]]; then
-            Z=1  # Increment z for bugfix branches
+          # NOTE: The bugfix/* and feature/* cases will no longer run with the corrected trigger,
+          # but are left here in case you re-add them in the future.
+          elif [[ "${BRANCH_NAME}" == bugfix/* ]]; then
+            Z=1
             VERSION="${YEAR}.${WEEK}.${Z}-${COMMIT_HASH}-dev.${BUILD_ID}"
             BUILD_TYPE="dev"
-          elif [[ "${GITHUB_REF_NAME}" == feature/* ]]; then
+          elif [[ "${BRANCH_NAME}" == feature/* ]]; then
             VERSION="${YEAR}.${WEEK}.${Z}-${COMMIT_HASH}-dev.${BUILD_ID}"
             BUILD_TYPE="dev"
           else
-            echo "Unsupported branch type: ${GITHUB_REF_NAME}"
+            echo "Unsupported branch type: ${BRANCH_NAME}"
             exit 1
           fi
 
-          # Create a sanitized version for filenames, replacing '.' with '_'
           SAFE_VERSION=$(echo "${VERSION}" | tr '.' '_')
-
-          # Create a numeric file version (tuple of 4 integers)
           FILE_VERSION="${YEAR}.${WEEK}.${Z}.0"
 
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
@@ -72,31 +75,31 @@ jobs:
       SAFE_VERSION: ${{ needs.versioning.outputs.SAFE_VERSION }}
       FILE_VERSION: ${{ needs.versioning.outputs.FILE_VERSION }}
     steps:
-      - name: Checkout code
+      - name: Checkout specific commit
         uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.versioning.outputs.HEAD_SHA }}
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: 3.12.7
-
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nuitka
         shell: cmd
-
-      - name: Build executable
+      - name: Build executable with Nuitka
         run: |
           mkdir build
           nuitka --standalone --onefile ^
             --output-dir=build/windows ^
             --output-filename=tasa-${{ env.SAFE_VERSION }}.exe ^
             src/gui.py ^
-            --include-data-files=src/low.png=low.png ^
-            --include-data-files=src/low.ico=low.ico ^
-            --windows-icon-from-ico=src/low.ico ^
+            --include-data-files=src/static/low.png=low.png ^
+            --include-data-files=src/static/low.ico=low.ico ^
+            --windows-icon-from-ico=src/static/low.ico ^
             --assume-yes-for-downloads ^
             --windows-console-mode=disable ^
             --company-name="RIA" ^
@@ -107,26 +110,32 @@ jobs:
             --copyright="RIA" ^
             --trademarks="RIA"
         shell: cmd
-      - name: Upload artifact
+      - name: Setup Inno Setup
+        uses: joncloud/setup-inno-setup@v1
+      - name: Create Windows Installer
+        run: |
+          iscc.exe /DAppVersion=${{ env.VERSION }} /DSafeVersion=${{ env.SAFE_VERSION }} scripts/installer.iss
+        shell: cmd
+      - name: Upload Installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tasa-windows
-          path: build/windows/tasa-${{ env.SAFE_VERSION }}.exe
+          name: tasa-windows-installer
+          path: Output/tasa-installer-${{ env.SAFE_VERSION }}.exe
 
   build-linux:
     runs-on: ubuntu-latest
     container:
       image: quay.io/pypa/manylinux_2_34_x86_64:latest
-
     needs: versioning
     env:
       VERSION: ${{ needs.versioning.outputs.VERSION }}
       BUILD_TYPE: ${{ needs.versioning.outputs.BUILD_TYPE }}
       SAFE_VERSION: ${{ needs.versioning.outputs.SAFE_VERSION }}
-
     steps:
-      - name: Checkout code
+      - name: Checkout specific commit
         uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.versioning.outputs.HEAD_SHA }}
 
       - name: Install system dependencies
         run: |
@@ -139,7 +148,6 @@ jobs:
           pip3 install --upgrade pip
           pip3 install -r requirements.txt
           pip3 install nuitka
-
       - name: Build executable
         run: |
           mkdir -p build/linux
@@ -147,15 +155,13 @@ jobs:
             --output-dir=build/linux \
             --output-filename=tasa-${{ env.SAFE_VERSION }} \
             src/gui.py \
-            --include-data-files=src/low.png=low.png \
+            --include-data-files=src/static/low.png=low.png \
             --assume-yes-for-downloads
-
       - name: Prepare package root
         run: |
           mkdir -p pkgroot/usr/local/bin
           cp build/linux/tasa-${{ env.SAFE_VERSION }} pkgroot/usr/local/bin/tasa
           chmod +x pkgroot/usr/local/bin/tasa
-
           mkdir -p pkgroot/usr/share/applications
           cat > pkgroot/usr/share/applications/tasa.desktop <<EOF
           [Desktop Entry]
@@ -165,10 +171,8 @@ jobs:
           Type=Application
           Categories=Utility;
           EOF
-
           mkdir -p pkgroot/usr/share/pixmaps
-          cp src/low.png pkgroot/usr/share/pixmaps/tasa.png
-
+          cp src/static/low.png pkgroot/usr/share/pixmaps/tasa.png
       - name: Build .deb
         run: |
           fpm \
@@ -180,7 +184,6 @@ jobs:
             --architecture amd64 \
             -C pkgroot .
           mv tasa_${{ env.VERSION }}-1_amd64.deb build/linux/tasa-${{ env.SAFE_VERSION }}.deb
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -196,33 +199,30 @@ jobs:
       - build-linux
       - versioning
     steps:
-      - name: Checkout code
+      - name: Checkout specific commit
         uses: actions/checkout@v3
         with:
+          ref: ${{ needs.versioning.outputs.HEAD_SHA }}
           fetch-depth: 0
 
       - name: Set up Git user
         run: |
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
-
       - name: Create Git Tag
         run: |
           git tag -a "v${{ needs.versioning.outputs.VERSION }}" -m "Release v${{ needs.versioning.outputs.VERSION }}"
           git push origin "v${{ needs.versioning.outputs.VERSION }}"
-
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: tasa-windows
+          name: tasa-windows-installer
           path: artifacts/tasa-windows
-
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
           name: tasa-linux
           path: artifacts/tasa-linux
-
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
@@ -231,13 +231,13 @@ jobs:
           name: Release v${{ needs.versioning.outputs.VERSION }}
           body: |
             This release contains the following:
-            - Built files for Windows (tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.exe)
+            - Windows Installer (tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}.exe)
             - Built files for Linux:
               - Standalone binary (tasa-${{ needs.versioning.outputs.SAFE_VERSION }})
               - Debian package (tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.deb)
             - Build Type: ${{ needs.versioning.outputs.BUILD_TYPE }}
           draft: true
           artifacts: |
-            artifacts/tasa-windows/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.exe
+            artifacts/tasa-windows/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}.exe
             artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}
             artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.deb
