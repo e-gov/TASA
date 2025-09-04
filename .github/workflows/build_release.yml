@@ -109,7 +109,7 @@ jobs:
             --trademarks="RIA"
         shell: cmd
       - name: Setup Inno Setup
-        uses: joncloud/setup-inno-setup@v1
+        uses: crazy-max/ghaction-innosetup@v3
       - name: Create Windows Installer
         run: |
           iscc.exe /DAppVersion=${{ env.VERSION }} /DSafeVersion=${{ env.SAFE_VERSION }} scripts/installer.iss
