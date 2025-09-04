@@ -24,7 +24,7 @@ jobs:
       HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Checkout specific commit
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
 
@@ -74,20 +74,30 @@ jobs:
       FILE_VERSION: ${{ needs.versioning.outputs.FILE_VERSION }}
     steps:
       - name: Checkout specific commit
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.versioning.outputs.HEAD_SHA }}
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12.7
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pip\Cache
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install nuitka
         shell: cmd
+
       - name: Build executable with Nuitka
         run: |
           mkdir build
@@ -108,12 +118,13 @@ jobs:
             --copyright="RIA" ^
             --trademarks="RIA"
         shell: cmd
-      - name: Setup Inno Setup
-        uses: crazy-max/ghaction-innosetup@v3
-      - name: Create Windows Installer
-        run: |
-          iscc.exe /DAppVersion=${{ env.VERSION }} /DSafeVersion=${{ env.SAFE_VERSION }} scripts/installer.iss
-        shell: cmd
+
+      - name: Compile Windows Installer
+        uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
+        with:
+          path: scripts/installer.iss
+          options: /DAppVersion=${{ env.VERSION }} /DSafeVersion=${{ env.SAFE_VERSION }}
+
       - name: Upload Installer artifact
         uses: actions/upload-artifact@v4
         with:
@@ -131,9 +142,17 @@ jobs:
       SAFE_VERSION: ${{ needs.versioning.outputs.SAFE_VERSION }}
     steps:
       - name: Checkout specific commit
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.versioning.outputs.HEAD_SHA }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install system dependencies
         run: |
@@ -146,6 +165,7 @@ jobs:
           pip3 install --upgrade pip
           pip3 install -r requirements.txt
           pip3 install nuitka
+
       - name: Build executable
         run: |
           mkdir -p build/linux
@@ -155,6 +175,7 @@ jobs:
             src/gui.py \
             --include-data-files=src/static/low.png=low.png \
             --assume-yes-for-downloads
+
       - name: Prepare package root
         run: |
           mkdir -p pkgroot/usr/local/bin
@@ -171,6 +192,7 @@ jobs:
           EOF
           mkdir -p pkgroot/usr/share/pixmaps
           cp src/static/low.png pkgroot/usr/share/pixmaps/tasa.png
+
       - name: Build .deb
         run: |
           fpm \
@@ -182,6 +204,7 @@ jobs:
             --architecture amd64 \
             -C pkgroot .
           mv tasa_${{ env.VERSION }}-1_amd64.deb build/linux/tasa-${{ env.SAFE_VERSION }}.deb
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -199,14 +222,22 @@ jobs:
       SAFE_VERSION: ${{ needs.versioning.outputs.SAFE_VERSION }}
     steps:
       - name: Checkout specific commit
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.versioning.outputs.HEAD_SHA }}
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: 3.12.7
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install Dependencies
         run: |
@@ -247,7 +278,7 @@ jobs:
       - versioning
     steps:
       - name: Checkout specific commit
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ needs.versioning.outputs.HEAD_SHA }}
           fetch-depth: 0
@@ -256,6 +287,7 @@ jobs:
         run: |
           git config user.name "${{ github.actor }}"
           git config user.email "${{ github.actor }}@users.noreply.github.com"
+
       - name: Create Git Tag
         run: |
           git tag -a "v${{ needs.versioning.outputs.VERSION }}" -m "Release v${{ needs.versioning.outputs.VERSION }}"
@@ -268,7 +300,7 @@ jobs:
           path: artifacts/tasa-windows
 
       - name: Download Linux artifact
-        uses: actions-lab/download-artifact@v2
+        uses: actions/download-artifact@v4
         with:
           name: tasa-linux
           path: artifacts/tasa-linux
