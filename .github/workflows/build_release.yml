@@ -44,8 +44,6 @@ jobs:
           elif [[ "${BRANCH_NAME}" == "develop" ]]; then
             VERSION="${YEAR}.${WEEK}.${Z}-${COMMIT_HASH}-rc.${BUILD_ID}"
             BUILD_TYPE="rc"
-          # NOTE: The bugfix/* and feature/* cases will no longer run with the corrected trigger,
-          # but are left here in case you re-add them in the future.
           elif [[ "${BRANCH_NAME}" == bugfix/* ]]; then
             Z=1
             VERSION="${YEAR}.${WEEK}.${Z}-${COMMIT_HASH}-dev.${BUILD_ID}"
@@ -192,11 +190,59 @@ jobs:
             build/linux/tasa-${{ env.SAFE_VERSION }}
             build/linux/tasa-${{ env.SAFE_VERSION }}.deb
 
+  build-macos:
+    runs-on: macos-latest
+    needs: versioning
+    env:
+      VERSION: ${{ needs.versioning.outputs.VERSION }}
+      BUILD_TYPE: ${{ needs.versioning.outputs.BUILD_TYPE }}
+      SAFE_VERSION: ${{ needs.versioning.outputs.SAFE_VERSION }}
+    steps:
+      - name: Checkout specific commit
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ needs.versioning.outputs.HEAD_SHA }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12.7
+
+      - name: Install Dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip3 install -r requirements.txt
+          pip3 install nuitka
+
+      - name: Build .app bundle with Nuitka
+        run: |
+          nuitka --standalone \
+            --output-dir=build \
+            src/gui.py \
+            --include-data-files=src/static/low.png=low.png \
+            --macos-create-app-bundle \
+            --macos-app-icon=src/static/low.png \
+            --macos-app-name="TASA" \
+            --macos-app-version="${{ env.VERSION }}" \
+            --assume-yes-for-downloads
+
+      - name: Create .dmg disk image
+        run: |
+          mkdir -p dist
+          hdiutil create -volname "TASA Installer" -srcfolder "build/gui.app" -ov -format UDZO "dist/tasa-installer-${{ env.SAFE_VERSION }}.dmg"
+
+      - name: Upload Installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasa-macos-installer
+          path: dist/tasa-installer-${{ env.SAFE_VERSION }}.dmg
+
   tag_and_release:
     runs-on: ubuntu-latest
     needs:
       - build-windows
       - build-linux
+      - build-macos
       - versioning
     steps:
       - name: Checkout specific commit
@@ -213,16 +259,25 @@ jobs:
         run: |
           git tag -a "v${{ needs.versioning.outputs.VERSION }}" -m "Release v${{ needs.versioning.outputs.VERSION }}"
           git push origin "v${{ needs.versioning.outputs.VERSION }}"
+
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
           name: tasa-windows-installer
           path: artifacts/tasa-windows
+
       - name: Download Linux artifact
-        uses: actions/download-artifact@v4
+        uses: actions-lab/download-artifact@v2
         with:
           name: tasa-linux
           path: artifacts/tasa-linux
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tasa-macos-installer
+          path: artifacts/tasa-macos
+
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
         with:
@@ -232,6 +287,7 @@ jobs:
           body: |
             This release contains the following:
             - Windows Installer (tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}.exe)
+            - macOS Disk Image (tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}.dmg)
             - Built files for Linux:
               - Standalone binary (tasa-${{ needs.versioning.outputs.SAFE_VERSION }})
               - Debian package (tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.deb)
@@ -239,5 +295,6 @@ jobs:
           draft: true
           artifacts: |
             artifacts/tasa-windows/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}.exe
+            artifacts/tasa-macos/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}.dmg
             artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}
             artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.deb
