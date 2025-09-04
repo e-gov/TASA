@@ -129,10 +129,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tasa-windows-installer
-          path: Output/tasa-installer-${{ env.SAFE_VERSION }}.exe
+          path: scripts/Output/tasa-installer-${{ env.SAFE_VERSION }}.exe
 
   build-linux:
     runs-on: ubuntu-latest
+
     container:
       image: quay.io/pypa/manylinux_2_34_x86_64:latest
     needs: versioning
