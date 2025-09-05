@@ -29,7 +29,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Files]
 ; Source: "path\in\runner" DestDir: "path\in\installation"
 ; The main executable built by Nuitka.
-Source: "build\windows\tasa-{#SafeVersion}.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\build\windows\tasa-{#SafeVersion}.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 ; Start Menu and Desktop shortcuts

@@ -125,6 +125,10 @@ jobs:
           path: scripts/installer.iss
           options: /DAppVersion=${{ env.VERSION }} /DSafeVersion=${{ env.SAFE_VERSION }}
 
+      - name: List files for debugging
+        run: dir /s
+        shell: cmd
+
       - name: Upload Installer artifact
         uses: actions/upload-artifact@v4
         with:
