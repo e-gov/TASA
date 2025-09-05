@@ -95,7 +95,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install nuitka
         shell: cmd
 
       - name: Build executable with Nuitka
@@ -169,7 +168,6 @@ jobs:
 
           pip3 install --upgrade pip
           pip3 install -r requirements.txt
-          pip3 install nuitka
 
       - name: Build executable
         run: |
@@ -236,6 +234,10 @@ jobs:
         with:
           python-version: 3.12.7
 
+      - name: Set postfix for test builds
+        if: needs.versioning.outputs.BUILD_TYPE != 'stable'
+        run: echo "POSTFIX=-test" >> $GITHUB_ENV
+
       - name: Cache pip dependencies
         uses: actions/cache@v4
         with:
@@ -248,31 +250,40 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           pip3 install -r requirements.txt
-          pip3 install nuitka
-          pip3 install imageio
 
       - name: Build .app bundle with Nuitka
         run: |
-          nuitka --standalone \
-            --output-dir=build \
-            src/gui.py \
-            --include-data-files=src/static/low.png=low.png \
+          nuitka src/gui.py \
+            --standalone \
             --macos-create-app-bundle \
+            --output-dir=build \
+            --include-data-files=src/static/low.png=low.png \
             --macos-app-icon=src/static/low.png \
             --macos-app-name="TASA" \
             --macos-app-version="${{ env.VERSION }}" \
             --assume-yes-for-downloads
 
+      - name: Rename .app to final name
+        run: mv build/gui.app build/TASA.app
+
+      - name: Stage files for DMG
+        run: |
+          mkdir -p dmg_staging
+          cp -R build/TASA.app dmg_staging
+          ln -s /Applications dmg_staging/Applications
+
       - name: Create .dmg disk image
         run: |
           mkdir -p dist
-          hdiutil create -volname "TASA Installer" -srcfolder "build/gui.app" -ov -format UDZO "dist/tasa-installer-${{ env.SAFE_VERSION }}.dmg"
+          hdiutil create -volname "TASA Installer${{ env.POSTFIX }}" \
+            -srcfolder "dmg_staging" \
+            -ov -format UDZO "dist/tasa-installer-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}.dmg"
 
       - name: Upload Installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tasa-macos-installer
-          path: dist/tasa-installer-${{ env.SAFE_VERSION }}.dmg
+          name: tasa-macos-installer${{ env.POSTFIX }}
+          path: dist/tasa-installer-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}.dmg
 
   tag_and_release:
     runs-on: ubuntu-latest
