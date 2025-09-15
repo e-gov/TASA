@@ -4,10 +4,11 @@
 #define MyAppURL "https://www.ria.ee/"
 
 ; Logic to conditionally create a final version string with the postfix
+; CORRECTED: Removed {#...} from inside the define expression
 #ifdef Postfix
-  #define MyFinalVersion {#SafeVersion} + {#Postfix}
+  #define MyFinalVersion SafeVersion + Postfix
 #else
-  #define MyFinalVersion {#SafeVersion}
+  #define MyFinalVersion SafeVersion
 #endif
 
 ; Use the final version string to define all filenames
@@ -26,8 +27,6 @@ DisableProgramGroupPage=yes
 WizardStyle=modern
 Compression=lzma
 SolidCompression=yes
-
-; Use the defined output filename
 OutputDir=Output
 OutputBaseFilename={#MyOutputBaseFilename}
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -36,7 +35,6 @@ UninstallDisplayIcon={app}\{#MyAppExeName}
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-; Use the defined executable name
 Source: "..\build\windows\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
