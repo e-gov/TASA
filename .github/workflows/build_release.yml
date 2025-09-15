@@ -139,6 +139,12 @@ jobs:
           name: tasa-windows-installer${{ env.POSTFIX }}
           path: scripts/Output/tasa-installer-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}.exe
 
+      - name: Upload Executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tasa-windows-executable${{ env.POSTFIX }}
+          path: build/windows/tasa-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}.exe
+
   build-linux:
     runs-on: ubuntu-latest
     container:
@@ -321,11 +327,17 @@ jobs:
           git tag -a "v${{ needs.versioning.outputs.VERSION }}" -m "Release v${{ needs.versioning.outputs.VERSION }}"
           git push origin "v${{ needs.versioning.outputs.VERSION }}"
 
-      - name: Download Windows artifact
+      - name: Download Windows Installer artifact
         uses: actions/download-artifact@v4
         with:
           name: tasa-windows-installer${{ env.POSTFIX }}
-          path: artifacts/tasa-windows
+          path: artifacts/tasa-windows-installer
+
+      - name: Download Windows Executable artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tasa-windows-executable${{ env.POSTFIX }}
+          path: artifacts/tasa-windows-executable
 
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
@@ -337,7 +349,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: tasa-macos-installer${{ env.POSTFIX }}
-          path: artifacts/tasa-macos
+          path: artifacts/tasa-macos-installer
 
       - name: Create GitHub Release
         uses: ncipollo/release-action@v1
@@ -347,6 +359,7 @@ jobs:
           name: Release v${{ needs.versioning.outputs.VERSION }}
           body: |
             This release contains the following:
+            - Windows Standalone Executable (tasa-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.exe)
             - Windows Installer (tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.exe)
             - macOS Disk Image (tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.dmg)
             - Built files for Linux:
@@ -355,7 +368,8 @@ jobs:
             - Build Type: ${{ needs.versioning.outputs.BUILD_TYPE }}
           draft: true
           artifacts: |
-            artifacts/tasa-windows/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.exe
-            artifacts/tasa-macos/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.dmg
+            artifacts/tasa-windows-executable/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.exe
+            artifacts/tasa-windows-installer/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.exe
+            artifacts/tasa-macos-installer/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.dmg
             artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}
             artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.deb
