@@ -373,4 +373,3 @@ jobs:
             artifacts/tasa-macos-installer/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.dmg
             artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}
             artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.deb
-            
