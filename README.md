@@ -7,4 +7,3 @@
    ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝
 ```
 ### Teenusehaldurite Arva Sisestuse Automatiseerija
-.
