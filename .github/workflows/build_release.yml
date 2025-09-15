@@ -107,7 +107,7 @@ jobs:
           mkdir build
           nuitka --standalone --onefile ^
             --output-dir=build/windows ^
-            --output-filename=tasa-${{ env.SAFE_VERSION }}.exe ^
+            --output-filename=tasa-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}.exe ^
             src/gui.py ^
             --include-data-files=src/static/low.png=low.png ^
             --include-data-files=src/static/low.ico=low.ico ^
@@ -141,7 +141,6 @@ jobs:
 
   build-linux:
     runs-on: ubuntu-latest
-
     container:
       image: quay.io/pypa/manylinux_2_34_x86_64:latest
     needs: versioning
@@ -154,6 +153,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ needs.versioning.outputs.HEAD_SHA }}
+
+      - name: Set postfix for test builds
+        if: needs.versioning.outputs.BUILD_TYPE != 'stable'
+        run: echo "POSTFIX=-test" >> $GITHUB_ENV
 
       - name: Cache pip dependencies
         uses: actions/cache@v4
@@ -179,7 +182,7 @@ jobs:
           mkdir -p build/linux
           nuitka --standalone --onefile \
             --output-dir=build/linux \
-            --output-filename=tasa-${{ env.SAFE_VERSION }} \
+            --output-filename=tasa-${{ env.SAFE_VERSION }}${{ env.POSTFIX }} \
             src/gui.py \
             --include-data-files=src/static/low.png=low.png \
             --assume-yes-for-downloads
@@ -187,7 +190,7 @@ jobs:
       - name: Prepare package root
         run: |
           mkdir -p pkgroot/usr/local/bin
-          cp build/linux/tasa-${{ env.SAFE_VERSION }} pkgroot/usr/local/bin/tasa
+          cp build/linux/tasa-${{ env.SAFE_VERSION }}${{ env.POSTFIX }} pkgroot/usr/local/bin/tasa
           chmod +x pkgroot/usr/local/bin/tasa
           mkdir -p pkgroot/usr/share/applications
           cat > pkgroot/usr/share/applications/tasa.desktop <<EOF
@@ -211,15 +214,15 @@ jobs:
             --iteration 1 \
             --architecture amd64 \
             -C pkgroot .
-          mv tasa_${{ env.VERSION }}-1_amd64.deb build/linux/tasa-${{ env.SAFE_VERSION }}.deb
+          mv tasa_${{ env.VERSION }}-1_amd64.deb build/linux/tasa-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}.deb
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tasa-linux
+          name: tasa-linux${{ env.POSTFIX }}
           path: |
-            build/linux/tasa-${{ env.SAFE_VERSION }}
-            build/linux/tasa-${{ env.SAFE_VERSION }}.deb
+            build/linux/tasa-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}
+            build/linux/tasa-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}.deb
 
   build-macos:
     runs-on: macos-latest
@@ -304,6 +307,10 @@ jobs:
           ref: ${{ needs.versioning.outputs.HEAD_SHA }}
           fetch-depth: 0
 
+      - name: Set postfix for test builds
+        if: needs.versioning.outputs.BUILD_TYPE != 'stable'
+        run: echo "POSTFIX=-test" >> $GITHUB_ENV
+
       - name: Set up Git user
         run: |
           git config user.name "${{ github.actor }}"
@@ -317,19 +324,19 @@ jobs:
       - name: Download Windows artifact
         uses: actions/download-artifact@v4
         with:
-          name: tasa-windows-installer
+          name: tasa-windows-installer${{ env.POSTFIX }}
           path: artifacts/tasa-windows
 
       - name: Download Linux artifact
         uses: actions/download-artifact@v4
         with:
-          name: tasa-linux
+          name: tasa-linux${{ env.POSTFIX }}
           path: artifacts/tasa-linux
 
       - name: Download macOS artifact
         uses: actions/download-artifact@v4
         with:
-          name: tasa-macos-installer
+          name: tasa-macos-installer${{ env.POSTFIX }}
           path: artifacts/tasa-macos
 
       - name: Create GitHub Release
@@ -340,15 +347,15 @@ jobs:
           name: Release v${{ needs.versioning.outputs.VERSION }}
           body: |
             This release contains the following:
-            - Windows Installer (tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}.exe)
-            - macOS Disk Image (tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}.dmg)
+            - Windows Installer (tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.exe)
+            - macOS Disk Image (tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.dmg)
             - Built files for Linux:
-              - Standalone binary (tasa-${{ needs.versioning.outputs.SAFE_VERSION }})
-              - Debian package (tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.deb)
+              - Standalone binary (tasa-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }})
+              - Debian package (tasa-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.deb)
             - Build Type: ${{ needs.versioning.outputs.BUILD_TYPE }}
           draft: true
           artifacts: |
-            artifacts/tasa-windows/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}.exe
-            artifacts/tasa-macos/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}.dmg
-            artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}
-            artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}.deb
+            artifacts/tasa-windows/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.exe
+            artifacts/tasa-macos/tasa-installer-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.dmg
+            artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}
+            artifacts/tasa-linux/tasa-${{ needs.versioning.outputs.SAFE_VERSION }}${{ env.POSTFIX }}.deb
