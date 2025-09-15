@@ -122,7 +122,7 @@ jobs:
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
         with:
           path: scripts/installer.iss
-          options: /DAppVersion=${{ env.VERSION }} /DSafeVersion=${{ env.SAFE_VERSION }}
+          options: /DAppVersion=${{ env.VERSION }} /DSafeVersion=${{ env.SAFE_VERSION }} /DPostfix=${{ env.POSTFIX }}
 
       - name: List files for debugging
         run: dir /s
@@ -131,8 +131,8 @@ jobs:
       - name: Upload Installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: tasa-windows-installer
-          path: scripts/Output/tasa-installer-${{ env.SAFE_VERSION }}.exe
+          name: tasa-windows-installer${{ env.POSTFIX }}
+          path: scripts/Output/tasa-installer-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}.exe
 
   build-linux:
     runs-on: ubuntu-latest

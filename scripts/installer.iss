@@ -1,12 +1,18 @@
-; This script is parameterized. The AppVersion and SafeVersion are passed in
-; from the GitHub Actions workflow using the /D flag.
-
+; Define base app details
 #define MyAppName "TASA"
 #define MyAppPublisher "RIA"
 #define MyAppURL "https://www.ria.ee/"
 
-#define MyAppExeName "tasa-{#SafeVersion}.exe"
-#define MyOutputName "tasa-installer"
+; Logic to conditionally create a final version string with the postfix
+#ifdef Postfix
+  #define MyFinalVersion {#SafeVersion} + {#Postfix}
+#else
+  #define MyFinalVersion {#SafeVersion}
+#endif
+
+; Use the final version string to define all filenames
+#define MyAppExeName "tasa-" + MyFinalVersion + ".exe"
+#define MyOutputBaseFilename "tasa-installer-" + MyFinalVersion
 
 [Setup]
 AppName={#MyAppName}
@@ -17,17 +23,20 @@ AppSupportURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableDirPage=no
 DisableProgramGroupPage=yes
-OutputBaseFilename={#MyOutputName}-{#SafeVersion}
+WizardStyle=modern
 Compression=lzma
 SolidCompression=yes
-WizardStyle=modern
 
+; Use the defined output filename
+OutputDir=Output
+OutputBaseFilename={#MyOutputBaseFilename}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
+; Use the defined executable name
 Source: "..\build\windows\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
