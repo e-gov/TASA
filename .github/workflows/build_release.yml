@@ -78,6 +78,11 @@ jobs:
         with:
           ref: ${{ needs.versioning.outputs.HEAD_SHA }}
 
+      - name: Set postfix for test builds
+        if: needs.versioning.outputs.BUILD_TYPE != 'stable'
+        run: echo "POSTFIX=-test" >> $GITHUB_ENV
+        shell: bash
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
