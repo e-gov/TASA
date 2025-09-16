@@ -15,9 +15,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Step 2: Scan repository for malware with ClamAV
-      - name: Scan for Malware with ClamAV
-        uses: move-fast/clamav-scan-action@main
+      # Step 2: Install, Update, and Run ClamAV
+      - name: Scan repository for malware with ClamAV
+        run: |
+          # 1. Install ClamAV and the freshclam database updater
+          # -y accepts all prompts
+          # qq reduces terminal output
+          echo "Installing ClamAV..."
+          sudo apt-get update
+          sudo apt-get install -y clamav clamav-daemon
+          
+          # 2. Update the ClamAV virus database
+          # This is a critical step to get the latest definitions
+          echo "Updating virus definitions..."
+          sudo freshclam
+          
+          # 3. Run the scan
+          # -r: recursive scan
+          # --infected: only print infected files
+          # --exclude-dir: ignore the .git folder to speed up the scan
+          # The command will exit with a non-zero status code if viruses are found,
+          # which will automatically fail the workflow step.
+          echo "Scanning repository..."
+          sudo clamscan -r --infected --exclude-dir=./.git .
 
       # Step 3: Set up Python environment
       - name: Set up Python
