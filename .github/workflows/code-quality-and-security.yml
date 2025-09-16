@@ -18,24 +18,20 @@ jobs:
       # Step 2: Install, Update, and Run ClamAV
       - name: Scan repository for malware with ClamAV
         run: |
-          # 1. Install ClamAV and the freshclam database updater
-          # -y accepts all prompts
-          # qq reduces terminal output
+          # 1. Install ClamAV
           echo "Installing ClamAV..."
           sudo apt-get update
           sudo apt-get install -y clamav clamav-daemon
           
-          # 2. Update the ClamAV virus database
-          # This is a critical step to get the latest definitions
-          echo "Updating virus definitions..."
+          # 2. Stop the background service to prevent a race condition
+          echo "Stopping the clamav-freshclam service..."
+          sudo systemctl stop clamav-freshclam
+          
+          # 3. Update the ClamAV virus database manually
+          echo "Updating virus definitions manually..."
           sudo freshclam
           
-          # 3. Run the scan
-          # -r: recursive scan
-          # --infected: only print infected files
-          # --exclude-dir: ignore the .git folder to speed up the scan
-          # The command will exit with a non-zero status code if viruses are found,
-          # which will automatically fail the workflow step.
+          # 4. Run the scan
           echo "Scanning repository..."
           sudo clamscan -r --infected --exclude-dir=./.git .
 
