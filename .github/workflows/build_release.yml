@@ -102,6 +102,27 @@ jobs:
           pip install -r requirements.txt
         shell: cmd
 
+      - name: Build executable with Nuitka
+        run: |
+          mkdir build
+          nuitka --standalone --onefile ^
+            --output-dir=build/windows ^
+            --output-filename=tasa-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}.exe ^
+            src/gui.py ^
+            --include-data-files=src/static/low.png=low.png ^
+            --include-data-files=src/static/low.ico=low.ico ^
+            --windows-icon-from-ico=src/static/low.ico ^
+            --assume-yes-for-downloads ^
+            --windows-console-mode=disable ^
+            --company-name="RIA" ^
+            --product-name="TASA" ^
+            --file-version="${{ env.FILE_VERSION }}" ^
+            --product-version="${{ env.FILE_VERSION }}" ^
+            --file-description="TASA rakendus" ^
+            --copyright="RIA" ^
+            --trademarks="RIA"
+        shell: cmd
+
       - name: Scan built executable for malware
         run: |
           # 1. Install ClamAV
@@ -125,36 +146,11 @@ jobs:
           clamscan.exe -r "build/windows"
         shell: powershell
 
-      - name: Build executable with Nuitka
-        run: |
-          mkdir build
-          nuitka --standalone --onefile ^
-            --output-dir=build/windows ^
-            --output-filename=tasa-${{ env.SAFE_VERSION }}${{ env.POSTFIX }}.exe ^
-            src/gui.py ^
-            --include-data-files=src/static/low.png=low.png ^
-            --include-data-files=src/static/low.ico=low.ico ^
-            --windows-icon-from-ico=src/static/low.ico ^
-            --assume-yes-for-downloads ^
-            --windows-console-mode=disable ^
-            --company-name="RIA" ^
-            --product-name="TASA" ^
-            --file-version="${{ env.FILE_VERSION }}" ^
-            --product-version="${{ env.FILE_VERSION }}" ^
-            --file-description="TASA rakendus" ^
-            --copyright="RIA" ^
-            --trademarks="RIA"
-        shell: cmd
-
       - name: Compile Windows Installer
         uses: Minionguyjpro/Inno-Setup-Action@v1.2.2
         with:
           path: scripts/installer.iss
           options: /DAppVersion=${{ env.VERSION }} /DSafeVersion=${{ env.SAFE_VERSION }} /DPostfix=${{ env.POSTFIX }}
-
-      - name: List files for debugging
-        run: dir /s
-        shell: cmd
 
       - name: Upload Installer artifact
         uses: actions/upload-artifact@v4
