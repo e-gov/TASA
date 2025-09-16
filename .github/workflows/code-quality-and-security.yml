@@ -17,7 +17,7 @@ jobs:
 
       # Step 2: Scan repository for malware with ClamAV
       - name: Scan for Malware with ClamAV
-        uses: actions-clamav-scan/actions-clamav-scan@v1
+        uses: boro-alpha/actions-clamav-scan@v1
 
       # Step 3: Set up Python environment
       - name: Set up Python
