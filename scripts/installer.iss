@@ -28,8 +28,9 @@ WizardStyle=modern
 Compression=lzma
 SolidCompression=yes
 OutputDir=Output
-OutputBaseFilename={#MyOutputBaseFilename}
+OutputBaseFilename={#MyOutput-BaseFilename}
 UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile=..\src\static\low.ico
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
