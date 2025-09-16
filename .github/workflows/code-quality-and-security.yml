@@ -33,7 +33,7 @@ jobs:
           
           # 4. Run the scan
           echo "Scanning repository..."
-          sudo clamscan -r --infected --exclude-dir=./.git .
+          sudo clamscan -r --exclude-dir=./.git .
 
       # Step 3: Set up Python environment
       - name: Set up Python
