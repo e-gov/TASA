@@ -104,13 +104,24 @@ jobs:
 
       - name: Scan built executable for malware
         run: |
-          # Use Chocolatey package manager to install ClamAV on Windows
-          choco install clamav
+          # 1. Install ClamAV
+          choco install clamav -y
+
+          # 2. Define the ClamAV tools directory
+          $clamavDir = "C:\ProgramData\chocolatey\lib\clamav\tools"
           
-          # Update the virus definitions by calling the shim directly
+          # 3. Create the required config files from the samples
+          Copy-Item "$clamavDir\freshclam.conf.sample" -Destination "$clamavDir\freshclam.conf"
+          Copy-Item "$clamavDir\clamd.conf.sample" -Destination "$clamavDir\clamd.conf"
+          
+          # 4. Comment out the "Example" line in both config files
+          (Get-Content "$clamavDir\freshclam.conf").replace('Example', '#Example') | Set-Content "$clamavDir\freshclam.conf"
+          (Get-Content "$clamavDir\clamd.conf").replace('Example', '#Example') | Set-Content "$clamavDir\clamd.conf"
+          
+          # 5. Update the virus definitions
           freshclam.exe
           
-          # Scan the specific build output directory
+          # 6. Scan the build directory
           clamscan.exe -r "build/windows"
         shell: powershell
 
