@@ -106,10 +106,12 @@ jobs:
         run: |
           # Use Chocolatey package manager to install ClamAV on Windows
           choco install clamav
-          # Update the virus definitions
-          C:\ProgramData\chocolatey\lib\clamav\tools\freshclam.exe
+          
+          # Update the virus definitions by calling the shim directly
+          freshclam.exe
+          
           # Scan the specific build output directory
-          C:\ProgramData\chocolatey\lib\clamav\tools\clamscan.exe -r "build/windows"
+          clamscan.exe -r "build/windows"
         shell: powershell
 
       - name: Build executable with Nuitka
